@@ -84,10 +84,14 @@ public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
 
         foreach (var p in Utilities.GetPlayers())
         {
+
+                    foreach (var p in Utilities.GetPlayers())
+        {
             if (p is not { IsValid: true } || p.IsBot || p.IsHLTV)
                 continue;
-            if (p.Connected != PlayerConnectedState.PlayerConnected)
-                continue;
+
+            bool spectator = p.Team == CsTeam.Spectator || p.Team == CsTeam.None;
+
 
             bool spectator = p.Team == CsTeam.Spectator || p.Team == CsTeam.None;
             bool dead = !spectator && !p.PawnIsAlive;
