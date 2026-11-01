@@ -11,8 +11,12 @@ public class GPBannerConfig : BasePluginConfig
     [JsonPropertyName("ImageUrls")]
     public List<string> ImageUrls { get; set; } = new()
     {
-        "https://raw.githubusercontent.com/Aimus-uz/gamepoint-assets/main/banner_test_v2.png"
+        "https://raw.githubusercontent.com/Aimus-uz/gamepoint-assets/main/banner_test_v5.png"
     };
+
+    // {url} is replaced with the image link. Try width/height here to make it bigger.
+    [JsonPropertyName("HtmlTemplate")]
+    public string HtmlTemplate { get; set; } = "<img src='{url}'>";
 
     [JsonPropertyName("ShowToDead")]
     public bool ShowToDead { get; set; } = true;
@@ -33,7 +37,7 @@ public class GPBannerConfig : BasePluginConfig
 public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
 {
     public override string ModuleName => "GPBanner";
-    public override string ModuleVersion => "1.0.3";
+    public override string ModuleVersion => "1.0.4";
     public override string ModuleAuthor => "GAMEPOINT";
     public override string ModuleDescription => "Banner for dead players and spectators";
 
@@ -94,7 +98,7 @@ public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
 
         int rotate = Math.Max(1, Config.RotateSeconds);
         int index = (int)(now / rotate) % Config.ImageUrls.Count;
-        _html = $"<img src='{Config.ImageUrls[index]}'>";
+        _html = Config.HtmlTemplate.Replace("{url}", Config.ImageUrls[index]);
 
         foreach (var p in Utilities.GetPlayers())
         {
