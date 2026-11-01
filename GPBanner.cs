@@ -11,7 +11,7 @@ public class GPBannerConfig : BasePluginConfig
     [JsonPropertyName("ImageUrls")]
     public List<string> ImageUrls { get; set; } = new()
     {
-        "https://raw.githubusercontent.com/Aimus-uz/gamepoint-assets/main/banner_test.png"
+        "https://raw.githubusercontent.com/Aimus-uz/gamepoint-assets/main/banner_test_v2.png"
     };
 
     [JsonPropertyName("ShowToDead")]
