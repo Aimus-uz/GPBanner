@@ -21,8 +21,13 @@ public class GPBannerConfig : BasePluginConfig
     [JsonPropertyName("ShowToSpectators")]
     public bool ShowToSpectators { get; set; } = true;
 
+    // With several images: switch every N seconds
     [JsonPropertyName("RotateSeconds")]
     public int RotateSeconds { get; set; } = 15;
+
+    // Re-send the same banner only this often (in case another plugin overwrote the center panel)
+    [JsonPropertyName("RefreshSeconds")]
+    public int RefreshSeconds { get; set; } = 10;
 
     // Silence after round start so the A/B bombsite image is not overwritten
     [JsonPropertyName("PauseAfterRoundStart")]
@@ -32,7 +37,7 @@ public class GPBannerConfig : BasePluginConfig
 public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
 {
     public override string ModuleName => "GPBanner";
-    public override string ModuleVersion => "1.0.1";
+    public override string ModuleVersion => "1.0.2";
     public override string ModuleAuthor => "GAMEPOINT";
     public override string ModuleDescription => "Banner for dead players and spectators";
 
@@ -40,11 +45,18 @@ public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
 
     private float _roundStart;
 
+    // slot -> (time sent, image index sent)
+    private readonly Dictionary<int, (float Time, int Index)> _shown = new();
+
     public void OnConfigParsed(GPBannerConfig config) => Config = config;
 
     public override void Load(bool hotReload)
     {
-        RegisterListener<Listeners.OnMapStart>(_ => _roundStart = 0f);
+        RegisterListener<Listeners.OnMapStart>(_ =>
+        {
+            _roundStart = 0f;
+            _shown.Clear();
+        });
 
         RegisterEventHandler<EventRoundStart>((_, _) =>
         {
@@ -52,11 +64,11 @@ public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
             return HookResult.Continue;
         });
 
-        // Instantly hide the banner when the player respawns
+        // Instantly hide on respawn
         RegisterEventHandler<EventPlayerSpawn>((ev, _) =>
         {
             var p = ev.Userid;
-            if (p is { IsValid: true } && !p.IsBot)
+            if (p is { IsValid: true } && !p.IsBot && _shown.Remove(p.Slot))
                 Server.NextFrame(() =>
                 {
                     if (p.IsValid)
@@ -65,8 +77,14 @@ public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
             return HookResult.Continue;
         });
 
-        // Twice per second; each banner lives 1s -> fallback hide < 1s
-        AddTimer(0.5f, Tick, TimerFlags.REPEAT);
+        RegisterEventHandler<EventPlayerDisconnect>((ev, _) =>
+        {
+            if (ev.Userid is { IsValid: true } p)
+                _shown.Remove(p.Slot);
+            return HookResult.Continue;
+        });
+
+        AddTimer(1.0f, Tick, TimerFlags.REPEAT);
     }
 
     private void Tick()
@@ -80,6 +98,7 @@ public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
 
         int rotate = Math.Max(1, Config.RotateSeconds);
         int index = (int)(now / rotate) % Config.ImageUrls.Count;
+        int refresh = Math.Max(2, Config.RefreshSeconds);
         string html = $"<img src='{Config.ImageUrls[index]}'>";
 
         foreach (var p in Utilities.GetPlayers())
@@ -89,9 +108,21 @@ public class GPBanner : BasePlugin, IPluginConfig<GPBannerConfig>
 
             bool spectator = p.Team == CsTeam.Spectator || p.Team == CsTeam.None;
             bool dead = !spectator && !p.PawnIsAlive;
+            bool eligible = (spectator && Config.ShowToSpectators) || (dead && Config.ShowToDead);
 
-            if ((spectator && Config.ShowToSpectators) || (dead && Config.ShowToDead))
-                p.PrintToCenterHtml(html, 1);
+            if (!eligible)
+            {
+                if (_shown.Remove(p.Slot))
+                    p.PrintToCenterHtml(" ", 0);
+                continue;
+            }
+
+            // Send only if: not shown yet, image changed, or refresh time passed
+            if (_shown.TryGetValue(p.Slot, out var s) && s.Index == index && now - s.Time < refresh)
+                continue;
+
+            p.PrintToCenterHtml(html, refresh + 5); // lives longer than refresh -> no gap, no flicker
+            _shown[p.Slot] = (now, index);
         }
     }
 }
